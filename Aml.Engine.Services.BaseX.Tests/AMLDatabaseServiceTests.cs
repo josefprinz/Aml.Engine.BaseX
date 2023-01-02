@@ -11,7 +11,7 @@ namespace Aml.Engine.Services.BaseX.Tests
     [TestClass()]
     public class AMLDatabaseServiceTests
     {
-        private AMLDatabaseService _service;
+        private AMLDatabaseService? _service;
 
         [TestInitialize()]
         public void InitTests()
@@ -23,7 +23,7 @@ namespace Aml.Engine.Services.BaseX.Tests
         [TestMethod()]
         public void ConnectTest()
         {
-            Assert.IsTrue(_service.Connect("http://localhost:8080/rest/", "admin", "josef"));
+            Assert.IsTrue(_service?.Connect("http://localhost:8080/rest/", "admin", "josef"));
         }
 
         [TestMethod()]
@@ -44,8 +44,8 @@ namespace Aml.Engine.Services.BaseX.Tests
         [TestMethod()]
         public void GetDocumentListAsyncTest()
         {
-            var documents = _service.GetDocumentListAsync ("AutomationML").Result;
-            Assert.IsTrue(documents.Count>0);
+            var documents = _service?.GetDocumentListAsync ("AutomationML").Result;
+            Assert.IsTrue(documents?.Count>0);
         }
     }
 }
