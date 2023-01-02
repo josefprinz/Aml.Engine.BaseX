@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Title>AutomationML BaseX Service</Title>
+    <Authors>josefPrinz</Authors>
+    <Description>This service can be used to connect to an AutomationML BaseX database and to retrieve and update AutomationML models from the database.</Description>
+    <Copyright>Josef Prinz 2023</Copyright>
+    <PackageProjectUrl>https://prinz-berlin.de</PackageProjectUrl>
+    <PackageTags>AutomationML; AMLEngine; AMLBaseX</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <IncludeSymbols>True</IncludeSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aml.Engine" Version="3.0.2" />
+  </ItemGroup>
+
+</Project>
