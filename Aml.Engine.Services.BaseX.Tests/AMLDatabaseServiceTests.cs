@@ -1,10 +1,4 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Aml.Engine.Services.BaseX;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Aml.Engine.Services.BaseX.Tests
 {
@@ -17,13 +11,13 @@ namespace Aml.Engine.Services.BaseX.Tests
         public void InitTests()
         {
             _service = AMLDatabaseService.Register();
-            _service.Connect("http://localhost:8080/rest/", "admin", "josef");
+            var _ = _service.Connect("http://localhost:8080/rest/", "admin", "josef").Result;
         }
 
         [TestMethod()]
         public void ConnectTest()
         {
-            Assert.IsTrue(_service?.Connect("http://localhost:8080/rest/", "admin", "josef"));
+            Assert.IsTrue(_service?.Connect("http://localhost:8080/rest/", "admin", "josef").Result.Any());
         }
 
         [TestMethod()]
@@ -44,8 +38,8 @@ namespace Aml.Engine.Services.BaseX.Tests
         [TestMethod()]
         public void GetDocumentListAsyncTest()
         {
-            var documents = _service?.GetDocumentListAsync ("AutomationML").Result;
-            Assert.IsTrue(documents?.Count>0);
+            var documents = _service?.GetDocumentListAsync("AutomationML").Result;
+            Assert.IsTrue(documents?.Count() > 0);
         }
     }
 }
