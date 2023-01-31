@@ -19,12 +19,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aml.Engine" Version="3.0.2" />
     <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="5.2.9" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="XQueryResources\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Aml.Engine\Aml.Engine.Services\Aml.Engine.Services.csproj" />
+    <ProjectReference Include="..\..\Aml.Engine\Aml.Engine\Aml.Engine.csproj" />
   </ItemGroup>
 
 </Project>

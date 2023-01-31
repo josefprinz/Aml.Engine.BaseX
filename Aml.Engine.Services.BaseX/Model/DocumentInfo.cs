@@ -11,19 +11,26 @@ namespace Aml.Engine.Services.BaseX.Model
     /// <summary>
     /// Information about a document resource in a BaseX database
     /// </summary>
-    public readonly struct DocumentInfo
+    public class DocumentInfo
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="DocumentInfo"/> struct.
         /// </summary>
         /// <param name="element">The element.</param>
-        internal DocumentInfo (XElement element)
+        internal DocumentInfo (string databaseName, XElement element)
         {
             Name = element.Value;
             if (long.TryParse(element.Attribute("size")?.Value, out var size))
             {
                 Size = size;
             }
+            DatabaseName = databaseName;
+        }
+
+        internal DocumentInfo(string databaseName, string documentName)
+        {
+            Name = documentName;
+            DatabaseName = databaseName;
         }
 
         /// <summary>
@@ -33,6 +40,7 @@ namespace Aml.Engine.Services.BaseX.Model
         /// The name.
         /// </value>
         public string Name { get; }
+        public string DatabaseName { get; }
 
         /// <summary>
         /// Gets the total size of the document file.
