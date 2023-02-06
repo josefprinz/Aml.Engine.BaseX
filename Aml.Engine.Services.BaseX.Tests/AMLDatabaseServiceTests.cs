@@ -1,7 +1,5 @@
 ﻿using Aml.Engine.CAEX;
-using Aml.Engine.Services.BaseX;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System.Reflection.Metadata;
 using System.Xml.Linq;
 
 namespace Aml.Engine.Services.BaseX.Tests
@@ -51,13 +49,6 @@ namespace Aml.Engine.Services.BaseX.Tests
         {
             var document = _service?.LoadCAEXFileHeaderAsXDocumentAsync("AutomationML", "AssetAdministrationShellLib.aml").Result;
             Assert.IsTrue(document is not null);
-        }
-
-        [TestMethod()]
-        public void PostExampleTest()
-        {
-            var text = _service?.PostExample().Result;
-            Assert.IsNotNull(text);
         }
 
 

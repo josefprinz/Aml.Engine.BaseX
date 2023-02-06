@@ -2,12 +2,15 @@
 using Aml.Engine.Services.AML;
 using Aml.Engine.Services.BaseX.Helper;
 using Aml.Engine.Services.BaseX.Model;
+using Aml.Engine.Services.BaseX.Templates;
 using Aml.Engine.Services.Interfaces;
 using Aml.Engine.Xml.Extensions;
 using Aml.Engine.XML;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.RegularExpressions;
+using System.Xml;
 using System.Xml.Linq;
 
 namespace Aml.Engine.Services.BaseX
@@ -18,6 +21,7 @@ namespace Aml.Engine.Services.BaseX
     /// </summary>
     public class AMLDatabaseService : IDatabaseService, IXMLDocumentRegistry
     {
+
         #region Fields
 
         private readonly DocumentReferenceDictionary<DocumentInfo> _documentTable;
@@ -169,24 +173,19 @@ namespace Aml.Engine.Services.BaseX
                 return Enumerable.Empty<XElement>();
             }
 
-            string? path = null;
-            var documentInfo = _documentTable[element.Document];
-            switch (name.LocalName)
+            
+            // if the provided name is not a valid child name, the query is not executed
+            if (CAEXDocument.Document(element)?.SchemaManager.CanAddNew(element,name)!=true)
             {
-                case CAEX_CLASSModel_TagNames.ROLECLASSLIB_STRING:
-                case CAEX_CLASSModel_TagNames.EXTERNALREFERENCE_STRING:
-                case CAEX_CLASSModel_TagNames.ATTRIBUTETYPELIB_STRING:
-                case CAEX_CLASSModel_TagNames.INTERFACECLASSLIB_STRING:
-                case CAEX_CLASSModel_TagNames.INSTANCEHIERARCHY_STRING:
-                case CAEX_CLASSModel_TagNames.SYSTEMUNITCLASSLIB_STRING:
-                    break;
-
-                default:
-                    path = element.GetAbsoluteXPath();
-                    break;
+                return Enumerable.Empty<XElement>();
             }
 
-            var elementsString = Task.Run(() => GetElementHeaderAsync(documentInfo.DatabaseName, documentInfo.Name, name.LocalName, path));
+            var documentInfo = _documentTable[element.Document];
+            var path = element.GetAbsoluteXPath();
+            var query = XQueryCAEXTemplates.IterativeElementsTemplate (documentInfo.DatabaseName,
+                documentInfo.Name, path, name.LocalName );
+
+            var elementsString = Task.Run(() => RunXQueryAsync(documentInfo.DatabaseName, query));
 
             if (string.IsNullOrEmpty(elementsString.Result))
             {
@@ -199,7 +198,7 @@ namespace Aml.Engine.Services.BaseX
                     ? e.Elements()
                     : Enumerable.Empty<XElement>();
 
-                if (insert)
+                if (insert && elements.Any())
                 {
                     var caexParent = element.CreateCAEXWrapper() as CAEXBasicObject;
                     bool isInserted = false;
@@ -261,23 +260,42 @@ namespace Aml.Engine.Services.BaseX
             return Enumerable.Empty<DocumentInfo>();
         }
 
-        public async Task<string> RunQueryAsync(string database, string query)
+        public bool IsLoaded(string database, string resource)
         {
-            if (_client == null)
-            {
-                return string.Empty;
-            }
+            return _documentTable.Values.Any(d => d.DatabaseName == database && d.Name == resource);
+        }
 
+        /// <summary>
+        /// Loads the CAEXFile from the specified <paramref name="resource"/> from the
+        /// <paramref name="database"/> as a new <see cref="CAEXDocument"/>.
+        /// </summary>
+        /// <param name="database">The name of the AutomationML Database</param>
+        /// <param name="resource">The name of the AML resource file</param>
+        /// <returns>
+        /// The loaded CAEXDocument if it exists; otherwise <c>null</c>.
+        /// </returns>
+        public async Task<CAEXDocument?> LoadCAEXDocumentAsync(string database, string resource)
+        {
             try
             {
-                return await RunXQueryAsync(database, query);
+                var nodeString = await LoadCAEXFileAsync(database, resource);
+                if (!string.IsNullOrEmpty(nodeString))
+                {
+                    var document = await CAEXDocument.LoadFromStringAsync(nodeString);
+                    if (document == null)
+                    {
+                        _error = $"Cannot load CAEXDocument from resource {resource}";
+                        return null;
+                    }
+                    _documentTable.Add(document.XDocument, new DocumentInfo(database, resource));
+                    return document;
+                }
             }
             catch (Exception ex)
             {
                 _error = ex.Message;
             }
-
-            return string.Empty;
+            return null;
         }
 
         /// <summary>
@@ -297,10 +315,16 @@ namespace Aml.Engine.Services.BaseX
         {
             try
             {
-                var nodeString = await GetElementHeaderAsync(database, resource, CAEX_CLASSModel_TagNames.CAEX_FILE);
-                if (!string.IsNullOrEmpty(nodeString))
+                // the resource specifies the AutomationML document in the database
+                // the CAEXFileHeaderTemplate defines the partial CAEXFile query
+                var query = XQueryCAEXTemplates.CAEXFileHeaderTemplate (database, resource);
+
+                // this async method is the HTTP post REST client method
+                var caexFile = await RunXQueryAsync(database, query);
+                if (!string.IsNullOrEmpty(caexFile))
                 {
-                    var document = await CAEXDocument.LoadFromStringAsync(nodeString);
+                    // the result string is converted to a CAEXDocument
+                    var document = await CAEXDocument.LoadFromStringAsync(caexFile);
                     if (document == null)
                     {
                         _error = $"Cannot load CAEXDocument from resource {resource}";
@@ -334,49 +358,17 @@ namespace Aml.Engine.Services.BaseX
         {
             try
             {
-                var nodeString = await GetElementHeaderAsync(database, resource, CAEX_CLASSModel_TagNames.CAEX_FILE);
-                if (!string.IsNullOrEmpty(nodeString))
+                var query = XQueryCAEXTemplates.CAEXFileHeaderTemplate(database, resource);
+                var caexFile = await RunXQueryAsync (database, query);
+                if (!string.IsNullOrEmpty(caexFile))
                 {
-                    var document = XDocument.Parse(nodeString);
+                    var document = XDocument.Parse(caexFile);
                     if (document == null)
                     {
                         _error = $"Cannot create XDocument from {resource}";
                         return null;
                     }
                     _documentTable.Add(document, new DocumentInfo(database, resource));
-                    return document;
-                }
-            }
-            catch (Exception ex)
-            {
-                _error = ex.Message;
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// Loads the CAEXFile from the specified <paramref name="resource"/> from the
-        /// <paramref name="database"/> as a new <see cref="CAEXDocument"/>.
-        /// </summary>
-        /// <param name="database">The name of the AutomationML Database</param>
-        /// <param name="resource">The name of the AML resource file</param>
-        /// <returns>
-        /// The loaded CAEXDocument if it exists; otherwise <c>null</c>.
-        /// </returns>
-        public async Task<CAEXDocument?> LoadCAEXDocumentAsync(string database, string resource)
-        {
-            try
-            {
-                var nodeString = await LoadCAEXFileAsync(database, resource);
-                if (!string.IsNullOrEmpty(nodeString))
-                {
-                    var document = await CAEXDocument.LoadFromStringAsync(nodeString);
-                    if (document == null)
-                    {
-                        _error = $"Cannot load CAEXDocument from resource {resource}";
-                        return null;
-                    }
-                    _documentTable.Add(document.XDocument, new DocumentInfo(database, resource));
                     return document;
                 }
             }
@@ -420,42 +412,7 @@ namespace Aml.Engine.Services.BaseX
             return null;
         }
 
-        /// <summary>
-        /// Posts an xquery to the example database named factbook.
-        /// Used to text xquery requests.
-        /// </summary>
-        /// <returns></returns>
-        public async Task<string?> PostExample()
-        {
-            if (_client == null)
-            {
-                return null;
-            }
-
-            Uri url = new($"{_client.BaseAddress}/factbook");
-
-            String request =
-       "<query xmlns='http://basex.org/rest'>\n" +
-       "  <text>//city/@*</text>\n" +
-       "</query>";
-
-            var stringContent = new StringContent(request, Encoding.UTF8, "application/query+xml");
-
-            try
-            {
-                using var response = await _client.PostAsync(url, stringContent);
-                if (response.IsSuccessStatusCode)
-                {
-                    var result = await response.Content.ReadAsStringAsync();
-                    return result;
-                }
-            }
-            catch (Exception ex)
-            {
-                _error = ex.Message;
-            }
-            return null;
-        }
+       
 
         /// <summary>
         /// Removes the document from the internal registry of the service.
@@ -467,77 +424,44 @@ namespace Aml.Engine.Services.BaseX
             _documentTable.RemoveFromTable(document.XDocument);
         }
 
-        public bool IsLoaded(string database, string resource)
-        {
-            return _documentTable.Values.Any(d => d.DatabaseName == database && d.Name == resource);
-        }
-
-        private static XName Name(string tagName) => "{http://basex.org/rest}" + tagName;
-
-        private static string HeaderRequestString(string database, string resource, string elementName, string? path = null)
-        {
-            return path == null
-                ?
-                "<run>\n" +
-                $"<variable name='file' value='{database}/{resource}'/>\n" +
-                $"<text>{elementName}Header.xq</text>\n" +
-                "</run>"
-                :
-                "<run>\n" +
-                $"<variable name='file' value='doc('{database}/{resource}'){path}'/>\n" +
-                $"<text>{elementName}Header.xq</text>\n" +
-                "</run>";
-        }
-
-        /// <summary>
-        /// Loads the CAEXFile document root node from the specified <paramref name="resource"/> from the
-        /// <paramref name="database"/>.
-        /// </summary>
-        /// <remarks>
-        /// Only the CAEXFile element and the header information is loaded.
-        /// </remarks>
-        /// <param name="database">The name of the AutomationML Database</param>
-        /// <param name="resource">The name of the AML resource file</param>
-        /// <returns>
-        /// The root node string if exists; otherwise <c>null</c>.
-        /// </returns>
-        private async Task<string> GetElementHeaderAsync(string database, string resource, string name, string? path = null)
+        public async Task<string> RunQueryAsync(string database, string query)
         {
             if (_client == null)
             {
                 return string.Empty;
             }
 
-            Uri url = new($"{_client.BaseAddress}{database}");
-
-            string request = HeaderRequestString(database, resource, name, path);
-
-            var stringContent = new StringContent(request, Encoding.UTF8, "application/query+xml");
-
             try
             {
-                using var response = await _client.PostAsync(url, stringContent);
-                if (response.IsSuccessStatusCode)
-                {
-                    var result = await response.Content.ReadAsStringAsync();
-                    if (string.IsNullOrEmpty(result))
-                    {
-                        _error = "no content";
-                        return string.Empty;
-                    }
-                    return result;
-                }
-                else
-                {
-                    _error = response.StatusCode.ToString();
-                }
+                return await RunXQueryAsync(database, query);
             }
             catch (Exception ex)
             {
                 _error = ex.Message;
             }
+
             return string.Empty;
         }
+        private static string FormatXml(string xml, bool indent = true, bool newLineOnAttributes = false, string indentChars = "  ", ConformanceLevel conformanceLevel = ConformanceLevel.Document) =>
+            FormatXml(xml, new XmlWriterSettings { Indent = indent, NewLineOnAttributes = newLineOnAttributes, IndentChars = indentChars, ConformanceLevel = conformanceLevel });
+
+        private static string FormatXml(string xml, XmlWriterSettings settings)
+        {
+            using (var textReader = new StringReader(xml))
+            using (var xmlReader = XmlReader.Create(textReader, new XmlReaderSettings { ConformanceLevel = settings.ConformanceLevel }))
+            using (var textWriter = new StringWriter())
+            {
+                using (var xmlWriter = XmlWriter.Create(textWriter, settings))
+                    xmlWriter.WriteNode(xmlReader, true);
+                return textWriter.ToString();
+            }
+        }
+
+        
+
+        private static XName Name(string tagName) => "{http://basex.org/rest}" + tagName;
+        
+       
 
         /// <summary>
         /// Loads the CAEXFile document from the specified <paramref name="resource"/> from the
@@ -588,6 +512,7 @@ namespace Aml.Engine.Services.BaseX
             return string.Empty;
         }
 
+
         private async Task<string> RunXQueryAsync(string database, string query)
         {
             if (_client == null)
@@ -597,19 +522,11 @@ namespace Aml.Engine.Services.BaseX
 
             Uri url = new($"{_client.BaseAddress}{database}");
 
-            string request = "<query>\n" +
-                $"<text>{query}</text>\n" +
+            query = Regex.Replace(query, @"\t\r\n?|\n", " ");
+            var xmlText = new XText(query);
+            string request = "<query>" +
+                $"<text>{xmlText}</text>" +
                 "</query>";
-
-            //request = "<query>\n" +
-            //    "<text>for $i in .//text() return string-length($i)</text>\n" +
-            //    "<context>\n" +
-            //    "<xml>\n" +
-            //        "<text>Hello</text>\n" +
-            //        "<text>World</text>\n" +
-            //    "</xml>\n" +
-            //    "</context>\n" +
-            //    "</query>";
 
             var stringContent = new StringContent(request, Encoding.UTF8, "application/query+xml");
 
@@ -624,11 +541,11 @@ namespace Aml.Engine.Services.BaseX
                         _error = "no content";
                         return string.Empty;
                     }
-                    return result;
+                    return FormatXml(result);
                 }
                 else
                 {
-                    _error = response.StatusCode.ToString();
+                    _error = response.StatusCode.ToString() + response.ToString();
                 }
             }
             catch (Exception ex)
@@ -644,5 +561,6 @@ namespace Aml.Engine.Services.BaseX
         }
 
         #endregion Methods
+
     }
 }

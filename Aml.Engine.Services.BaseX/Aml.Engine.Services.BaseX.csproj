@@ -23,10 +23,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="XQueryResources\" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\Aml.Engine\Aml.Engine.Services\Aml.Engine.Services.csproj" />
     <ProjectReference Include="..\..\Aml.Engine\Aml.Engine\Aml.Engine.csproj" />
   </ItemGroup>
